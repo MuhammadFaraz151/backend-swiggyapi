@@ -1,4 +1,4 @@
-import puppeteer from "puppeteer-core";
+import puppeteer from "puppeteer";
 
 let cachedCookies = null;
 let lastFetched = 0;
@@ -46,10 +46,13 @@ async function fetchFreshCookies() {
 
   const browser = await puppeteer.launch({
     headless: "new",
-    executablePath: "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--single-process",
+      "--no-zygote",
       "--disable-blink-features=AutomationControlled",
     ],
   });
