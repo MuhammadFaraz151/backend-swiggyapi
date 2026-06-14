@@ -5,36 +5,44 @@ import { getSwiggyHeaders, invalidateCookies } from "./cookieManager.js";
 const app = express();
 app.use(cors());
 
+async function swiggyFetch(url) {
+  const headers = await getSwiggyHeaders();
+  const response = await fetch(url, { method: "GET", headers });
+  const text = await response.text();
+
+  if (!text || text.includes("<!DOCTYPE")) {
+    console.log("⚠️ Got HTML — invalidating cookies and retrying once...");
+    invalidateCookies();
+    const freshHeaders = await getSwiggyHeaders();
+    const retry = await fetch(url, { method: "GET", headers: freshHeaders });
+    const retryText = await retry.text();
+    if (!retryText || retryText.includes("<!DOCTYPE")) {
+      throw new Error("Blocked even after refresh");
+    }
+    return JSON.parse(retryText);
+  }
+
+  return JSON.parse(text);
+}
+
 app.get("/api/menu/:id", async (req, res) => {
   const { id } = req.params;
   const url = `https://www.swiggy.com/dapi/menu/pl?page-type=REGULAR_MENU&complete-menu=true&lat=28.7040592&lng=77.10249019999999&restaurantId=${id}&catalog_qa=undefined&submitAction=ENTER`;
-
   try {
-    const headers = await getSwiggyHeaders();
-    const response = await fetch(url, { method: "GET", headers });
-    const text = await response.text();
-
-    // Detect blocked response — cookie was rejected
-    if (!text || text.includes("<!DOCTYPE")) {
-      console.log("⚠️ Got HTML — invalidating cookies and retrying once...");
-      invalidateCookies();                        // force Puppeteer on next call
-
-      // Retry once with fresh cookies
-      const freshHeaders = await getSwiggyHeaders();
-      const retry = await fetch(url, { method: "GET", headers: freshHeaders });
-      const retryText = await retry.text();
-
-      if (!retryText || retryText.includes("<!DOCTYPE")) {
-        return res.status(502).json({ success: false, error: "Blocked even after refresh" });
-      }
-
-      return res.json({ success: true, data: JSON.parse(retryText) });
-    }
-
-    return res.json({ success: true, data: JSON.parse(text) });
-
+    const data = await swiggyFetch(url);
+    return res.json({ success: true, data });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    res.status(502).json({ success: false, error: err.message });
+  }
+});
+
+app.get("/api/restaurants", async (req, res) => {
+  const url = `https://www.swiggy.com/dapi/restaurants/list/v5?lat=18.9690247&lng=72.8205292&is-seo-homepage-enabled=true&page_type=DESKTOP_WEB_LISTING`;
+  try {
+    const data = await swiggyFetch(url);
+    return res.json({ success: true, data });
+  } catch (err) {
+    res.status(502).json({ success: false, error: err.message });
   }
 });
 
